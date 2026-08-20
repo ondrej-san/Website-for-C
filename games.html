@@ -259,8 +259,8 @@
             ants = antStarts.map(function(a) {
                 return { x: a.x, y: a.y, dir: a.dir };
             });
-            renderAntControls();
             antRunning = true;
+            renderAntControls();
             antLoop();
         }
         function stepAnt(ant) {

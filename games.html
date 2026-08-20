@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <link rel="stylesheet" href="styles.css">
+    </head>
+    <body>
+        <nav>
+            <a href="index.html">Home</a>
+            <a href="games.html">Games</a>
+            <a href="about.html">About</a>
+        </nav>
+        <main>
+        <h1>Games</h1>
+        <div class="game-grid">
+            <div class="game-card" onclick="openGame('tictactoe')">
+                <img src="images/tic-tac-toe.png" alt="Tic-Tac-Toe">
+                <p>Tic-Tac-Toe</p>
+            </div>
+            <div class="game-card" onclick="openGame('pong')">
+                <img src="images/pong.png">
+                <p>Pong</p>
+            </div>
+            <div class="game-card" onclick="openGame('langtonsant')">
+                <img src="images/langton's_ant.png">
+                <p>Langton's Ant</p>
+            </div>
+            <div class="game-card" onclick="openGame('drivemad')">
+                <img src="images/drivemad.png" alt="Drive Mad">
+                <p>Drive Mad</p>
+            </div>
+        </div>
+        <div id="game-popup" class="popup-overlay hidden">
+            <div class="popup-box" onmouseleave="hideTttCursor()">
+                <button class="close-btn" onclick="closePopup()">x</button>
+                <div id="popup-content">Game goes HERE</div>
+            </div>
+        </div>
+        </main>
+    <script>
+        let tttBoard;
+        let tttPlayer;
+
+        let antCanvas, antCtx;
+        let antGrid;
+        let ants;
+        let antWrap = true;
+        let antLoopId;
+        const ANT_COLS = 100, ANT_ROWS = 100, ANT_CELL = 4;
+        const antDirs = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+        let antRules = ['R', 'L'];
+        let antColors = ['#12123a', '#bcbcff'];
+        let ANT_SPEED = 10;
+        let antRunning;
+        let antStarts = [{ x: Math.floor(ANT_COLS / 2), y: Math.floor(ANT_ROWS / 2), dir: 0 }];
+
+        let pongCanvas, pongCtx;
+        let ballX, ballY;
+        let leftY, rightY;
+        let ballVX, ballVY;
+        let pongLoopId;
+        let pongKeys = {};
+        let leftScore, rightScore;
+        let pongCountdown, pongCountdownTimer;
+        const PADDLE_W = 10, PADDLE_H = 80, BALL_R = 8, PADDLE_SPEED = 6;
+
+        // TIC-TAC-TOE
+        const tttLines = [
+            [0, 1, 2], [3, 4, 5], [6, 7, 8],
+            [0, 3, 6], [1, 4, 7], [2, 5, 8],
+            [0, 4, 8], [2, 4, 6]
+        ]
+        const games = {
+            tetris: '<iframe src="https://SOME-TETRIS-URL" width="400" height="500"></iframe>',
+            snake: '<p>Snake - coming soon!</p>',
+            tictactoe: initTicTacToe,
+            langtonsant: initLangton,
+            pong: initPong,
+            drivemad: '<iframe src="https://ducky443747.github.io/games/DriveMad/" width="500" height="400" style="border:none;"></iframe>'
+        };
+
+        document.addEventListener('keydown', function(e) {
+            pongKeys[e.key] = true; });
+        document.addEventListener('keyup', function(e) {
+            pongKeys[e.key] = false; });
+
+        function hideTttCursor() {
+            document.getElementById('ttt-cursor').classList.add('hidden');
+        }
+        function openGame(id) {
+            const content = document.getElementById('popup-content');
+            const g = games[id];
+            if (typeof g == 'function') {
+                g();
+            } else {
+                content.innerHTML = g;
+            }
+            document.getElementById('game-popup').classList.remove('hidden');
+        }
+        function closePopup() {
+            document.getElementById('popup-content').innerHTML = '';
+            document.getElementById('game-popup').classList.add('hidden');
+            document.getElementById('ttt-cursor').classList.add('hidden');
+            cancelAnimationFrame(pongLoopId);
+            clearInterval(pongCountdownTimer);
+            cancelAnimationFrame(antLoopId);
+        }
+        function tttHover(cell, i) {
+            const marker = document.getElementById('ttt-cursor');
+            if (tttBoard[i] !== '') {
+                marker.classList.add('hidden');
+                return;
+            }
+            marker.classList.remove('hidden');
+            const rect = cell.getBoundingClientRect();
+            marker.style.left = (rect.left + rect.width / 2) + 'px';
+            marker.style.top = (rect.top + rect.height / 2) + 'px';
+        }
+        function initTicTacToe() {
+            tttBoard = [
+                '', '', '',
+                '', '', '',
+                '', '', ''
+            ];
+            tttPlayer = 'X';
+            document.getElementById('ttt-cursor').classList.remove('hidden');
+            renderTicTacToe();
+        }
+        function renderTicTacToe() {
+            let html = '<div class="ttt-board">';
+            for (let i = 0; i < 9; i++) {
+                html += '<div class="ttt-cell" onclick="tttClick('+i+')" onmouseover="tttHover(this,' + i +' )">' + tttBoard[i] + '</div>';
+            }
+            html += '</div>';
+            html += '<button class="reset-btn" onclick="initTicTacToe()">Play Again</button>'
+            document.getElementById('popup-content').innerHTML = html;
+            document.getElementById('ttt-cursor').textContent = tttPlayer;
+        }
+        function tttClick(i) {
+            if (tttBoard[i] !== '') return;
+            tttBoard[i] = tttPlayer;
+
+            let winner = checkTttWinner();
+            if (winner !== null) {
+                renderTicTacToe();
+                alert(winner + ' wins!');
+                return;
+            }
+            if (!tttBoard.includes('')) {
+                renderTicTacToe();
+                alert("It's a draw!");
+                return;
+            }
+            tttPlayer = (tttPlayer === 'X') ? 'O' : 'X';
+            renderTicTacToe();
+        }
+        function checkTttWinner() {
+            for (let line of tttLines) {
+                let a = line[0], b = line[1], c = line[2];
+                if (tttBoard[a] !== '' && tttBoard[a] === tttBoard[b] && tttBoard[b] === tttBoard[c]) {
+                    return tttBoard[a];
+                }
+            }
+            return null;
+        }
+
+        // PONG
+        function initPong() {
+            cancelAnimationFrame(pongLoopId);
+            document.getElementById('popup-content').innerHTML = '<canvas id="pong-canvas" width="500" height="400"></canvas>'+'<br><button onclick="initPong()">Restart</button>';
+            pongCanvas = document.getElementById('pong-canvas');
+            pongCtx = pongCanvas.getContext('2d');
+            ballX = 250; ballY = 200;
+            leftY = 160; rightY = 160;
+            ballVX = 4; ballVY = 3;
+            leftScore = 0; rightScore = 0;
+
+            pongCountdown = 3;
+            clearInterval(pongCountdownTimer);
+            pongCountdownTimer = setInterval(function() {
+                pongCountdown--;
+                if (pongCountdown <= 0)
+                clearInterval(pongCountdownTimer);
+            }, 1000);
+
+            pongLoop();
+        }
+        function drawPong() {
+            const ctx = pongCtx;
+            ctx.fillStyle = '#12123a';
+            ctx.fillRect(0, 0, 500, 400);
+            ctx.fillStyle = '#bcbcff';
+            ctx.fillRect(10, leftY, PADDLE_W, PADDLE_H);
+            ctx.fillRect(480, rightY, PADDLE_W, PADDLE_H);
+            ctx.beginPath();
+            ctx.arc(ballX, ballY, BALL_R, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.font = '30px sans-serif';
+            ctx.fillText(leftScore, 150, 50);
+            ctx.fillText(rightScore, 330, 50);
+            if (pongCountdown > 0) {
+                ctx.fillStyle = 'rgba(18, 18, 58, 0.6)';
+                ctx.fillRect(0, 0, 500, 400);
+                ctx.fillStyle = '#bcbcff';
+                ctx.font = '60px sans-serif';
+                ctx.fillText(pongCountdown, 235, 220);
+            }
+        }
+        function pongLoop() {
+            updatePong();
+            drawPong();
+            pongLoopId = requestAnimationFrame(pongLoop);
+        }
+        function updatePong() {
+            if (pongCountdown > 0) return;
+
+            ballX += ballVX;
+            ballY += ballVY;
+
+            if (ballY - BALL_R < 0 || ballY + BALL_R > 400) {
+                ballVY = -ballVY;
+            }
+            
+            if (ballVX < 0 && ballX - BALL_R < 10 + PADDLE_W && ballY > leftY && ballY < leftY + PADDLE_H) {
+                ballVX = -ballVX;
+            }
+            if (ballVX > 0 && ballX + BALL_R > 480 && ballY > rightY && ballY < rightY + PADDLE_H) {
+                ballVX = -ballVX;
+            }
+            if (ballX < 0) { rightScore++; resetBall(1); }
+            if (ballX > 500) { leftScore++; resetBall(-1); }
+
+            if (pongKeys['w']) leftY -= PADDLE_SPEED;
+            if (pongKeys['s']) leftY += PADDLE_SPEED;
+            if (pongKeys['ArrowUp']) rightY -= PADDLE_SPEED;
+            if (pongKeys['ArrowDown']) rightY += PADDLE_SPEED;
+
+            leftY = Math.max(0, Math.min(400 - PADDLE_H, leftY));
+            rightY = Math.max(0, Math.min(400 - PADDLE_H, rightY));
+        }
+        function resetBall(direction) {
+            ballX = 250;
+            ballY = Math.random() * (400 - 2 * BALL_R);
+            ballVX = 4 * direction;
+            ballVY = (Math.random() < 0.5) ? -3 : 3;
+        }
+
+        // LANGTON'S ANT!!!!!
+        function initLangton() {
+            cancelAnimationFrame(antLoopId);
+            document.getElementById('popup-content').innerHTML = '<canvas id="ant-canvas" width="400" height="400"></canvas>'+'<div id="ant-controls"></div>';
+            antCanvas = document.getElementById('ant-canvas');
+            antCtx = antCanvas.getContext('2d');
+
+            antGrid = [];
+            for (let r = 0; r < ANT_ROWS; r++) {
+                antGrid.push(new Array(ANT_COLS).fill(0));
+            }
+
+            ants = antStarts.map(function(a) {
+                return { x: a.x, y: a.y, dir: a.dir };
+            });
+            renderAntControls();
+            antRunning = true;
+            antLoop();
+        }
+        function stepAnt(ant) {
+            let state = antGrid[ant.y][ant.x];
+            let turn = antRules[state];
+            if (turn === 'R') ant.dir = (ant.dir + 1) % 4;
+            else if (turn === 'L') ant.dir = (ant.dir + 3) % 4;
+            else if (turn === 'U') ant.dir = (ant.dir + 2) % 4;
+            // Straight (don't change direction)
+            antGrid[ant.y][ant.x] = (state + 1) % antRules.length;
+            ant.x += antDirs[ant.dir][0];
+            ant.y += antDirs[ant.dir][1];
+
+            if (antWrap) {
+                ant.x = (ant.x + ANT_COLS) % ANT_COLS;
+                ant.y = (ant.y + ANT_ROWS) % ANT_ROWS;
+            } else {
+                ant.x = Math.max(0, Math.min(ANT_COLS - 1, ant.x));
+                ant.y = Math.max(0, Math.min(ANT_ROWS - 1, ant.y));
+            }
+        }
+        function drawLangton() {
+            const ctx = antCtx;
+            for (let r = 0; r < ANT_ROWS; r++) {
+                for (let c = 0; c < ANT_COLS; c++) {
+                    ctx.fillStyle = antColors[antGrid[r][c]];
+                    ctx.fillRect(c * ANT_CELL, r * ANT_CELL, ANT_CELL, ANT_CELL);
+                }
+            }
+            ctx.fillStyle = 'red';
+            for (let ant of ants) {
+                ctx.fillRect(ant.x * ANT_CELL, ant.y * ANT_CELL, ANT_CELL, ANT_CELL);
+            }
+        }
+        function antLoop() {
+            for (let i = 0; i < ANT_SPEED; i++) {
+                for (let ant of ants) stepAnt(ant);
+            }
+            drawLangton();
+            antLoopId = requestAnimationFrame(antLoop);
+        }
+        function renderAntControls() {
+            let html = '';
+            for (let i = 0; i < antRules.length; i++) {
+                html += '<div>';
+                html += '<input type="color" id="rule-color-' + i + '" value = "' + antColors[i] + '"> ';
+                html += '<select id="rule-turn-' + i + '">';
+                html += '<option value="L"' + (antRules[i] === 'L' ? ' selected' : '') + '>Left</option>';
+                html += '<option value="R"' + (antRules[i] === 'R' ? ' selected' : '') + '>Right</option>';
+                html += '<option value="U"' + (antRules[i] === 'U' ? ' selected' : '') + '>U-turn</option>';
+                html += '<option value="S"' + (antRules[i] === 'S' ? ' selected' : '') + '>Straight</option>';
+                html += '</select>';
+                html += '</div>'
+            }
+            for (let i = 0; i < antStarts.length; i++) {
+                html += '<div>Ant '+i+': ';
+                html += 'x <input type="number" id="ant-x-'+i+'" value="'+antStarts[i].x +'" min="0" max="' + (ANT_COLS - 1) + '" style="width:55px"> ';
+                html += 'y <input type="number" id="ant-y-' + i + '" value="' + antStarts[i].y + '" min="0" max="' + (ANT_ROWS - 1) + '" style="width:55px"> ';
+                html += '<select id="ant-dir-'+i+'">';
+                html += '<option value="0"' + (antStarts[i].dir === 0 ? ' selected' : '') + '>Up</option>';
+                html += '<option value="1"' + (antStarts[i].dir === 1 ? ' selected' : '') + '>Right</option>';
+                html += '<option value="2"' + (antStarts[i].dir === 2 ? ' selected' : '') + '>Down</option>';
+                html += '<option value="3"' + (antStarts[i].dir === 3 ? ' selected' : '') + '>Left</option>';
+                html += '</select></div>';
+            }
+            html += '<div><label><input type="checkbox" id="ant-wrap"' + (antWrap ? ' checked' : '') + '> Wrap edges</label></div>';
+            html += '<button onclick="addAnt()">Add Ant</button>';
+            html += '<button onclick="addAntRule()">Add Rule</button>';
+            html += '<div>';
+            html += '<button id="ant-pause" onclick="toggleAntPause()">'+(antRunning ? 'Pause' : 'Resume')+'</button> ';
+            html += '<button onclick="stepAntOnce()">Step</button> ';
+            html += 'Speed <input type="range" id="ant-speed" min="1" max="100" value="'+ANT_SPEED + '" oninput="setAntSpeed(this.value)">';
+            html += '</div>';
+            html += '<button onclick="applyAntRules()">Apply &amp; Restart</button>';
+            document.getElementById('ant-controls').innerHTML = html;
+        }
+        function readAntRulesFromInputs() {
+            for (let i = 0; i < antRules.length; i++) {
+                antRules[i] = document.getElementById('rule-turn-'+i).value;
+                antColors[i] = document.getElementById('rule-color-'+i).value;
+            }
+            for (let i = 0; i < antStarts.length; i++) {
+                antStarts[i].x = Number(document.getElementById('ant-x-'+i).value);
+                antStarts[i].y   = Number(document.getElementById('ant-y-'   + i).value);
+                antStarts[i].dir = Number(document.getElementById('ant-dir-' + i).value);
+            }
+            antWrap = document.getElementById('ant-wrap').checked;
+        }
+        function randomColor() {
+            let value = Math.floor(Math.random() * 16777216);
+            return '#' + value.toString(16).padStart(6, '0');
+        }
+        function addAntRule() {
+            readAntRulesFromInputs();
+            antRules.push('R');
+            antColors.push(randomColor());
+            renderAntControls();
+        }
+        function applyAntRules() {
+            readAntRulesFromInputs();
+            initLangton();
+        }
+        function addAnt() {
+            readAntRulesFromInputs();
+            let a = {
+                x: Math.floor(Math.random() * ANT_COLS),
+                y: Math.floor(Math.random() * ANT_ROWS),
+                dir: Math.floor(Math.random() * 4)
+            };
+            antStarts.push(a);
+            ants.push({
+                x: a.x,
+                y: a.y,
+                dir: a.dir
+            });
+            renderAntControls();
+        }
+        function toggleAntPause() {
+            if (antRunning) {
+                antRunning = false;
+                cancelAnimationFrame(antLoopId);
+            } else {
+                antRunning = true;
+                antLoop();
+            }
+            document.getElementById('ant-pause').textContent = antRunning ? 'Pause' : 'Resume';
+        }
+        function stepAntOnce() {
+            for (let i = 0; i < ANT_SPEED; i++) {
+                for (let ant of ants) stepAnt(ant);
+            }
+            drawLangton();
+        }
+        function setAntSpeed(v) {
+            ANT_SPEED = Number(v);
+        }
+    </script>
+    <div id="ttt-cursor" class="hidden"></div>
+    </body>
+</html>
